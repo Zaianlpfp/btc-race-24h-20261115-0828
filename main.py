@@ -15,10 +15,14 @@ window; no code copied from the previous race entry):
   Scale-in: a later tranche is added only when the same signal fires again
   AND the price is at least 50 bps below the last tranche's entry, so the
   bot averages down into a deepening washout instead of chasing.
-  Exits (whole position): trailing stop 150 bps below the peak close since
-  the first tranche, hard stop 150 bps below the average entry, or a
-  120-bar (2 hour) time stop from the first tranche -- recoveries exhaust
-  in ~2 hours, holding longer only gives gains back in the drift down.
+  Exits (whole position): profit target 400 bps above the average entry
+  (bank the recovery once it has delivered 4% -- on the dev window the
+  winning recovery peaked then drifted down into the time stop, so the
+  target exits 12 bars earlier near the peak instead of giving the drift
+  back), trailing stop 150 bps below the peak close since entry, hard stop
+  150 bps below the average entry, or a 120-bar (2 hour) time stop from
+  the first tranche -- recoveries exhaust in ~2 hours, holding longer only
+  gives gains back in the drift down.
 
   Orders: buy = one third of the $1,000 starting cash per tranche
   ($333.33), sell = full position. Long only, no shorts, no leverage.
@@ -50,6 +54,7 @@ STEP_BPS = 50      # next tranche only 50+ bps below the last entry
 N_TRANCHES = 3     # at most 3 tranches, $333.33 each
 TRAIL_BPS = 150    # trailing stop below the peak close since entry
 HARD_BPS = 150     # hard stop below the average entry price
+TARGET_BPS = 400   # profit target above the average entry price
 TIME_STOP = 120    # bars from the first tranche, then exit
 TRANCHE = 1_000_000_000 // N_TRANCHES  # $333.33 in micro-USDC
 MAX_SLIP_BPS = 100
@@ -129,6 +134,9 @@ class Bot:
         # Holding (or a buy is pending): exits, then scale-in.
         avg = sum(self.tranches) / len(self.tranches)
         peak = max(closes[self.first_k:k + 1])
+        if closes[k] >= avg * (1 + TARGET_BPS / 10000):
+            self.pending = "sell"
+            return self._sell(state)
         if closes[k] <= peak * (1 - TRAIL_BPS / 10000):
             self.pending = "sell"
             return self._sell(state)
